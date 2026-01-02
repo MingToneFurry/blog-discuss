@@ -90,6 +90,10 @@ jobs:
                 variables: { commentId: $cid }
               }'
             )
+            
+            echo "🧪 GraphQL payload (raw): $GRAPHQL_PAYLOAD"
+            echo "🧪 query type: $(echo "$GRAPHQL_PAYLOAD" | jq -r '.query | type' 2>/dev/null || echo 'jq-parse-failed')"
+            echo "🧪 query length: $(echo "$GRAPHQL_PAYLOAD" | jq -r '.query | length' 2>/dev/null || echo 'jq-parse-failed')"
 
             echo "🔄 正在发送 GraphQL 删除请求..."
             DELETE_RESPONSE=$(curl --http1.1 -sS -w "\nHTTP_CODE:%{http_code}\nTOTAL_TIME:%{time_total}" \
