@@ -93,13 +93,13 @@ jobs:
             }'
             
             echo "🔄 正在发送 GraphQL 删除请求..."
-            DELETE_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}\nTOTAL_TIME:%{time_total}" \
-              -X POST "https://api.github.com/graphql" \
-              -H "Authorization: bearer ${GITHUB_TOKEN}" \
+            DELETE_RESPONSE=$(curl -s -X POST "https://api.github.com/graphql" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "User-Agent: akismet-giscus-bot" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
               -H "Content-Type: application/json" \
-              -H "User-Agent: AkismetBot/1.0" \
-              -d "$GRAPHQL_MUTATION" \
-              2>/dev/null || echo "DELETE_ERROR")
+              -d "$GRAPHQL_MUTATION")
             
             DELETE_HTTP_CODE=$(echo "$DELETE_RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
             DELETE_TIME=$(echo "$DELETE_RESPONSE" | grep "TOTAL_TIME:" | cut -d: -f2)
