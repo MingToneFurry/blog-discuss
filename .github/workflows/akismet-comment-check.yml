@@ -95,7 +95,7 @@ jobs:
             echo "🔄 正在发送 GraphQL 删除请求..."
             DELETE_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}\nTOTAL_TIME:%{time_total}" \
               -X POST "https://api.github.com/graphql" \
-              -H "Authorization: token ${GITHUB_TOKEN}" \
+              -H "Authorization: bearer ${GITHUB_TOKEN}" \
               -H "Content-Type: application/json" \
               -H "User-Agent: AkismetBot/1.0" \
               -d "$GRAPHQL_MUTATION" \
