@@ -4,7 +4,6 @@ on:
   discussion_comment:
     types: [created]
 
-# 这行对使用内置 GITHUB_TOKEN 很重要；即使用 PAT 也不冲突
 permissions:
   discussions: write
 
@@ -16,20 +15,23 @@ jobs:
         env:
           AKISMET_API_KEY: ${{ secrets.AKISMET_API_KEY }}
 
-          # 建议用你自己的 PAT（secrets.GH_TOKEN），gh cli 默认读 GH_TOKEN
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # ✅ 强烈建议先用 GitHub Actions 自带 token，最稳
+          # 如果你非要用 PAT，可以把下面这行改成：${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
 
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
           COMMENT_NODE_ID: ${{ github.event.comment.node_id }}
           COMMENT_HTML_URL: ${{ github.event.comment.html_url }}
           DISCUSSION_TITLE: ${{ github.event.discussion.title }}
-
-          # 直接用 GitHub Actions 自带的仓库信息
           REPO_FULL: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
+
+          # ✅ 清洗 token：去掉 Windows 回车和换行，避免 Authorization header 非法
+          GH_TOKEN="$(printf '%s' "${GH_TOKEN}" | tr -d '\r\n')"
+          export GH_TOKEN
 
           echo "============================================"
           echo "🤖 开始 AKISMET 垃圾评论检测 (GraphQL)"
@@ -41,6 +43,7 @@ jobs:
           echo "💬 讨论标题: ${DISCUSSION_TITLE}"
           echo "🔗 评论链接: ${COMMENT_HTML_URL}"
           echo "🆔 Comment Node ID: ${COMMENT_NODE_ID}"
+          echo "🔐 Token 长度: ${#GH_TOKEN}"
           echo ""
 
           echo "📄 评论内容:"
@@ -49,7 +52,6 @@ jobs:
           echo "----------------------------------------"
           echo ""
 
-          # 1) Akismet 检测
           echo "🌐 AKISMET API 请求信息:"
           AKISMET_URL="https://${AKISMET_API_KEY}.rest.akismet.com/1.1/comment-check"
           echo "📡 API 接口: ${AKISMET_URL:0:30}...comment-check"
@@ -80,12 +82,10 @@ jobs:
           echo ""
 
           if [[ "${HTTP_CODE:-}" != "200" ]]; then
-            echo "⚠️ AKISMET 错误：HTTP 非 200"
-            echo "📄 原始响应(首行): '${SPAM_CHECK_RESULT}'"
+            echo "❌ Akismet HTTP 非 200，直接失败"
             exit 1
           fi
 
-          # 2) 如果是垃圾评论：用 gh api graphql 删除 Discussion Comment
           if [[ "${SPAM_CHECK_RESULT}" == "true" ]]; then
             echo "🚨 检测到垃圾评论!"
             echo "============================================"
@@ -94,14 +94,13 @@ jobs:
             echo "🔍 GitHub GraphQL API 删除请求:"
             echo "📡 API 接口: https://api.github.com/graphql"
             echo "🆔 Comment Node ID: ${COMMENT_NODE_ID}"
-            echo "🔑 认证令牌: token ${GH_TOKEN:0:8}..."
             echo ""
 
-            # gh api graphql 最稳，不容易被 curl/JSON/换行坑到
             GRAPHQL_QUERY='mutation DeleteDiscussionComment($commentId: ID!) { deleteDiscussionComment(input: { id: $commentId }) { clientMutationId } }'
 
             echo "🔄 正在发送 GraphQL 删除请求..."
             DELETE_BODY="$(gh api graphql \
+              -H "User-Agent: akismet-giscus-bot" \
               -f query="${GRAPHQL_QUERY}" \
               -f commentId="${COMMENT_NODE_ID}" \
               --jq '.' \
@@ -111,10 +110,8 @@ jobs:
             echo "📄 响应内容: ${DELETE_BODY}"
             echo ""
 
-            # 检查 GraphQL errors
             if echo "${DELETE_BODY}" | jq -e '.errors? | length > 0' >/dev/null 2>&1; then
               echo "❌ GraphQL 错误: 删除失败"
-              echo "🔍 错误详情:"
               echo "${DELETE_BODY}" | jq '.errors' || true
               exit 1
             fi
@@ -127,10 +124,8 @@ jobs:
             echo "============================================"
             echo "🟢 Akismet 判定这不是垃圾评论"
             echo "✨ 来自 @${COMMENT_AUTHOR} 的评论被允许"
-
           else
-            echo "⚠️ AKISMET 返回意外响应"
-            echo "📄 原始响应(首行): '${SPAM_CHECK_RESULT}'"
+            echo "⚠️ Akismet 返回意外响应: '${SPAM_CHECK_RESULT}'"
             exit 1
           fi
 
